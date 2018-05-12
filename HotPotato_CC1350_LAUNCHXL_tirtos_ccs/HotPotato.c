@@ -381,7 +381,7 @@ void received_hi_my_index_is(int i)
         my_index = i+1;
         right_friend = 1;
         right_friend_physically = 1;
-        break;
+        break; 
     case IM_FIRST_WAITING_FOR_CIRCLE: //I'm first, and the circle expanded by 1
         state = IM_FIRST_WAITING_FOR_CIRCLE;
         left_friend = i;
