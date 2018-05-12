@@ -62,14 +62,6 @@
 #define IM_DEAD_MESSAGE_TYPE 3
 #define SECOND_ROUND_MESSAGE_TYPE 4
 
-/***** Logic Variables *****/
-int leftFriend = 0;
-int rightFriend = 2;
-int leftFriendPhysically = 0;
-int rightFriendPhysically = 2;
-int myIndex = 1;
-double remainingTimeHundrethSeconds = 1000.0;//10 seconds
-int state = 0;
 /*States description:
     0- not inited
     1- I'm first and waiting for initialization round to finish
@@ -80,125 +72,141 @@ int state = 0;
     6- Dead
     7- Won
 */
+#define NOTHING_DONE 0
+#define IM_FIRST_WAITING_FOR_CIRCLE 1
+#define IM_NOT_FIRST_NOT_IN_CIRCLE 2
+#define IM_NOT_FIRST_WAITING_FOR_CIRCLE 3
+#define WAITING_FOR_MY_TURN 4
+#define MY_TURN 5
+#define IM_DEAD 6
+#define IVE_WON 7
 
+/***** Logic Variables *****/
+int left_friend = 0;
+int right_friend = 2;
+int left_friend_physically = 0;
+int right_friend_physically = 2;
+int my_index = 1;
+double remaining_time_hundreth_sec = 1000.0;//10 seconds
+int state = 0;
 
 /***** Button and Led Variables and Inits *****/
-PIN_Config pinTable[] = {
+PIN_Config pin_table[] = {
     Board_LED1 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     Board_LED2 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
 };
-PIN_Config buttonPinTable[] = {
+PIN_Config button_pin_table[] = {
     Board_PIN_BUTTON0  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
     Board_PIN_BUTTON1  | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_NEGEDGE,
     PIN_TERMINATE
 };
-static PIN_Handle ledPinHandle;
-static PIN_State ledPinState;
-PIN_Handle pinHandle;
-static PIN_Handle buttonPinHandle;
-static PIN_State buttonPinState;
+static PIN_Handle led_pin_handle;
+static PIN_State led_pin_state;
+PIN_Handle pin_handle;
+static PIN_Handle button_pin_handle;
+static PIN_State button_pin_state;
 
 /***** Clock and Time-keeping Variables *****/
-Clock_Handle generalClockHandle;
+Clock_Handle general_clock_handle;
 Clock_Handle clockHandle;
-int firstClickOfDouble = 1;// used to detect double clicks vs normal click
-double timerDeltaHundrethSec = 30.0;
-int toDeduct = 0;
+int first_click_of_double = 1;// used to detect double clicks vs normal click
+double timer_delta_hundreth_sec = 30.0;
+int to_deduct = 0;
 
 /***** Communication related Variables *****/
-static uint8_t seqNumber =(uint8_t)0;
-uint8_t sendMessageType;
-uint8_t sendMessageContent1;
-uint8_t sendMessageContent2;
-uint8_t sendMessageContent3;
-uint8_t sendMessageContent4;
-uint8_t recvMessageType;
-uint8_t recvMessageContent1;
-uint8_t recvMessageContent2;
-uint8_t recvMessageContent3;
-uint8_t recvMessageContent4;
-Semaphore_Struct semStruct;
-Semaphore_Handle semHandle;
-Semaphore_Struct semStruct2;
-Semaphore_Handle semHandle2;
-static Task_Params rxTaskParams;
-Task_Struct rxTask;
-static uint8_t rxTaskStack[RFEASYLINKEX_TASK_STACK_SIZE];
-Task_Struct txTask;
-static Task_Params txTaskParams;
-static uint8_t txTaskStack[RFEASYLINKTX_TASK_STACK_SIZE];
+static uint8_t seq_number =(uint8_t)0;
+uint8_t send_message_type;
+uint8_t send_message_content1;
+uint8_t send_message_content2;
+uint8_t send_message_content3;
+uint8_t send_message_content4;
+uint8_t recv_message_type;
+uint8_t recv_message_content1;
+uint8_t recv_message_content2;
+uint8_t recv_message_content3;
+uint8_t recv_message_content4;
+Semaphore_Struct sem_struct;
+Semaphore_Handle sem_handle;
+Semaphore_Struct sem_struct2;
+Semaphore_Handle sem_handle2;
+static Task_Params rx_task_params;
+Task_Struct rx_task;
+static uint8_t rx_taskStack[RFEASYLINKEX_TASK_STACK_SIZE];
+Task_Struct tx_task;
+static Task_Params tx_task_params;
+static uint8_t tx_task_stack[RFEASYLINKTX_TASK_STACK_SIZE];
 int cnf=0;
 
 
 
-void turnGreenOn()
+void turn_green_on()
 {
-    PIN_setOutputValue(ledPinHandle, Board_LED1, 1);
+    PIN_setOutputValue(led_pin_handle, Board_LED1, 1);
 }
-void turnGreenOff()
+void turn_green_off()
 {
-    PIN_setOutputValue(ledPinHandle, Board_LED1, 0);
+    PIN_setOutputValue(led_pin_handle, Board_LED1, 0);
 }
-void turnRedOn()
+void turn_red_on()
 {
-    PIN_setOutputValue(ledPinHandle, Board_LED2, 1);
+    PIN_setOutputValue(led_pin_handle, Board_LED2, 1);
 }
-void turnRedOff()
+void turn_red_off()
 {
-    PIN_setOutputValue(ledPinHandle, Board_LED2, 0);
+    PIN_setOutputValue(led_pin_handle, Board_LED2, 0);
 }
-void turnRedIfInDanger(){
-    if(remainingTimeHundrethSeconds<200){//turn on red on last 2 seconds
-        turnRedOn();
+void turn_red_if_in_danger(){
+    if(remaining_time_hundreth_sec<200){//turn on red on last 2 seconds
+        turn_red_on();
     }
 }
 /**
  * Blink both leds in the amount of times
  */
-void doubleLedBlink(int times)
+void double_led_blink(int times)
 {
     if(times==1){
-        PIN_setOutputValue(ledPinHandle, Board_LED2, !PIN_getOutputValue(Board_LED2));
-        PIN_setOutputValue(ledPinHandle, Board_LED1, !PIN_getOutputValue(Board_LED1));
+        PIN_setOutputValue(led_pin_handle, Board_LED2, !PIN_getOutputValue(Board_LED2));
+        PIN_setOutputValue(led_pin_handle, Board_LED1, !PIN_getOutputValue(Board_LED1));
         return;
     }
     int i;
     for (i = 0; i < times; i++)
     {
-        turnRedOn();
-        turnGreenOn();
+        turn_red_on();
+        turn_green_on();
         CPUdelay(8000 * 20);
-        turnRedOff();
-        turnGreenOff();
+        turn_red_off();
+        turn_green_off();
         CPUdelay(8000 * 20);
     }
 }
-void IveWonAnimation()//Celebrate
+void ive_won_animation()//Celebrate
 {
     int i;
     for (i = 0; i < 10; i++)
     {
-        turnRedOn();
-        turnGreenOn();
+        turn_red_on();
+        turn_green_on();
         CPUdelay(8000 * 100);
-        turnRedOff();
-        turnGreenOff();
+        turn_red_off();
+        turn_green_off();
         CPUdelay(8000 * 100);
     }
 }
 
-void IveDiedAnimation()
+void ive_died_animation()
 {
     //turn on both lights
-    turnRedOn();
-    turnGreenOn();
+    turn_red_on();
+    turn_green_on();
 }
-void resumeTimeDeduction(){
-    toDeduct = 1;
+void resume_time_deduction(){
+    to_deduct = 1;
 }
-void stopTimeDeduction(){
-    toDeduct = 0;
+void stop_time_deduction(){
+    to_deduct = 0;
 }
 int randomSelect(int ind1, int ind2)
 {
@@ -210,100 +218,100 @@ int randomSelect(int ind1, int ind2)
     return ind2;
 }
 
-void sendMessageLogic(int msgType,int msgCont1,int msgCont2,int msgCont3,int msgCont4){
+void send_message_logic(int msg_type,int msg_cont1,int msg_cont2,int msg_cont3,int msg_cont4){
     EasyLink_abort();
     /*set the logical message fields*/
-    sendMessageType=msgType;
-    sendMessageContent1 = msgCont1;
-    sendMessageContent2 = msgCont2;
-    sendMessageContent3 = msgCont3;
-    sendMessageContent4 = msgCont4;
+    send_message_type=msg_type;
+    send_message_content1 = msg_cont1;
+    send_message_content2 = msg_cont2;
+    send_message_content3 = msg_cont3;
+    send_message_content4 = msg_cont4;
 
-    Semaphore_post(semHandle);
+    Semaphore_post(sem_handle);
 }
 
 /**
-* Send a message of type "Im deadIndex, and I've died, and here are my neihbors and next guys turn".
+* Send a message of type "Im dead_index, and I've died, and here are my neihbors and next guys turn".
 */
-void sendImDead(int deadIndex, int deadsLeft, int deadsRight, int nextGuysTurn)
+void send_im_dead(int dead_index, int deads_left, int deads_right, int next_guys_turn)
 {
-   seqNumber+=1;
-   sendMessageLogic(IM_DEAD_MESSAGE_TYPE,deadIndex,deadsLeft,deadsRight,nextGuysTurn);
+   seq_number+=1;
+   send_message_logic(IM_DEAD_MESSAGE_TYPE,dead_index,deads_left,deads_right,next_guys_turn);
 }
 
-void killClock(){
-    Clock_delete(&generalClockHandle);
+void kill_clock(){
+    Clock_delete(&general_clock_handle);
 }
 int blinkNum=0;
-void generalTimerTick(UArg arg)
+void general_timer_tick(UArg arg)
 {
-    if(toDeduct!=0){
-        turnRedIfInDanger();
-        remainingTimeHundrethSeconds= remainingTimeHundrethSeconds-timerDeltaHundrethSec;
-        if (remainingTimeHundrethSeconds <= 0)//out of time
+    if(to_deduct!=0){
+        turn_red_if_in_danger();
+        remaining_time_hundreth_sec= remaining_time_hundreth_sec-timer_delta_hundreth_sec;
+        if (remaining_time_hundreth_sec <= 0)//out of time
         {
-            state = 6;
-            stopTimeDeduction();
-            killClock();
-            IveDiedAnimation();
+            state = IM_DEAD;
+            stop_time_deduction();
+            kill_clock();
+            ive_died_animation();
             //notify I'm dead
-            sendImDead(myIndex, leftFriend, rightFriend,
-                       randomSelect(leftFriend, rightFriend));
+            send_im_dead(my_index, left_friend, right_friend,
+                       randomSelect(left_friend, right_friend));
         }
     }
 }
-void startGeneralTimer(){
-    Clock_Params clockParams;
-    Clock_Params_init(&clockParams);
-    clockParams.period = timerDeltaHundrethSec*1000;
-    clockParams.startFlag = FALSE;
-    generalClockHandle = Clock_create(generalTimerTick,timerDeltaHundrethSec*1000, &clockParams, NULL);
-    Clock_start(generalClockHandle);
+void start_general_timer(){
+    Clock_Params clock_params;
+    Clock_Params_init(&clock_params);
+    clock_params.period = timer_delta_hundreth_sec*1000;
+    clock_params.startFlag = FALSE;
+    general_clock_handle = Clock_create(general_timer_tick,timer_delta_hundreth_sec*1000, &clock_params, NULL);
+    Clock_start(general_clock_handle);
 }
 
 
 
-static void rfEasyLinkTxFnx(UArg arg0, UArg arg1)
+static void rf_easylink_tx_fnx(UArg arg0, UArg arg1)
 {
-    if(cnf==0){cnf=1;EasyLink_init(EasyLink_Phy_5kbpsSlLr);Semaphore_post(semHandle);}
+    if(cnf==0){cnf=1;EasyLink_init(EasyLink_Phy_5kbpsSlLr);Semaphore_post(sem_handle);}
     else{
-        Semaphore_pend(semHandle, BIOS_WAIT_FOREVER);
+        Semaphore_pend(sem_handle, BIOS_WAIT_FOREVER);
     }
 
     while(1) {
-        EasyLink_TxPacket txPacket =  { {0}, 0, 0, {0} };
-        Semaphore_pend(semHandle, 1000);
+        EasyLink_TxPacket tx_packet =  { {0}, 0, 0, {0} };
+        Semaphore_pend(sem_handle, 1000);
         /* Create packet with incrementing sequence number and random payload */
-        txPacket.payload[0] = (uint8_t)(seqNumber);
-        txPacket.payload[1] = sendMessageType;
-        txPacket.payload[2] = sendMessageContent1;
-        txPacket.payload[3] = sendMessageContent2;
-        txPacket.payload[4] = sendMessageContent3;
-        txPacket.payload[5] = sendMessageContent4;
+        tx_packet.payload[0] = (uint8_t)(seq_number);
+        tx_packet.payload[1] = send_message_type;
+        tx_packet.payload[2] = send_message_content1;
+        tx_packet.payload[3] = send_message_content2;
+        tx_packet.payload[4] = send_message_content3;
+        tx_packet.payload[5] = send_message_content4;
 
-        txPacket.len = RFEASYLINKTXPAYLOAD_LENGTH;
-        txPacket.dstAddr[0] = 0xaa;
+        tx_packet.len = RFEASYLINKTXPAYLOAD_LENGTH;
+        tx_packet.dstAddr[0] = 0xaa;
         /* Set Tx absolute time to current time + 100ms */
-        txPacket.absTime = EasyLink_getAbsTime() + EasyLink_ms_To_RadioTime(100);
+        tx_packet.absTime = EasyLink_getAbsTime() + EasyLink_ms_To_RadioTime(100);
         int times;
         for(times=0;times<2;times++){
             EasyLink_abort();
-            EasyLink_Status result = EasyLink_transmit(&txPacket);
+            EasyLink_Status result = EasyLink_transmit(&tx_packet);
         }
-        Semaphore_post(semHandle2);
+        Semaphore_post(sem_handle2);
     }
 }
 
-void txTask_init(PIN_Handle inPinHandle) {
-    ledPinHandle = inPinHandle;
+void tx_task_init(PIN_Handle in_pin_handle) {
+    led_pin_handle = in_pin_handle;
 
-    Task_Params_init(&txTaskParams);
-    txTaskParams.stackSize = RFEASYLINKTX_TASK_STACK_SIZE;
-    txTaskParams.priority = RFEASYLINKTX_TASK_PRIORITY;
-    txTaskParams.stack = &txTaskStack;
-    txTaskParams.arg0 = (UInt)1000000;
+    Task_Params_init(&tx_task_params);
+    tx_task_params.stackSize = RFEASYLINKTX_TASK_STACK_SIZE;
+    tx_task_params.priority = RFEASYLINKTX_TASK_PRIORITY;
+    tx_task_params.stack = &tx_task_stack;
+    tx_task_params.arg0 = (UInt)1000000;
 
-    Task_construct(&txTask, rfEasyLinkTxFnx, &txTaskParams, NULL);
+    Task_construct(&tx_task, rf_easylink_tx_fnx, &tx_task_params, NULL);
 }
 
 
@@ -311,167 +319,167 @@ void txTask_init(PIN_Handle inPinHandle) {
 /**
  * When we got a "your turn" message
  */
-void receivedYourTurn(int i)
+void received_your_turn(int i)
 {
-    if(i==myIndex){
-        state = 5;
-        turnGreenOn();
-        turnRedOff();
-        turnRedIfInDanger();
-        resumeTimeDeduction();
+    if(i==my_index){
+        state = MY_TURN;
+        turn_green_on();
+        turn_red_off();
+        turn_red_if_in_danger();
+        resume_time_deduction();
     }
     else
     {
-        state = 4;
-    turnRedOff();
-    turnGreenOff();
+        state = WAITING_FOR_MY_TURN;
+    turn_red_off();
+    turn_green_off();
     }
 }
 /**
  * When we got a "I'm dead" message
  */
-void receivedImDead(int deadIndex, int deadsLeft, int deadsRight,
-                    int nextGuysTurn)
+void received_im_dead(int dead_index, int deads_left, int deads_right,
+                    int next_guys_turn)
 {
     //fix neighbors
-    if (leftFriend == deadIndex)
+    if (left_friend == dead_index)
     {
-        leftFriend = deadsLeft;
+        left_friend = deads_left;
     }
-    if (rightFriend == deadIndex)
+    if (right_friend == dead_index)
     {
-        rightFriend = deadsRight;
+        right_friend = deads_right;
     }
-    if (rightFriend == myIndex) //I'm a neighbor of myself, i.e., I won
+    if (right_friend == my_index) //I'm a neighbor of myself, i.e., I won
     {
-        killClock();
-        IveWonAnimation();
-        stopTimeDeduction();// for case the other guy died because he pressed when it wasn't his turn, and it's my turn now
-        state=7;
-    }else if(nextGuysTurn == myIndex){//if it's my move, and it's not over, act like it
-        receivedYourTurn(myIndex);
+        kill_clock();
+        ive_won_animation();
+        stop_time_deduction();// for case the other guy died because he pressed when it wasn't his turn, and it's my turn now
+        state=IVE_WON;
+    }else if(next_guys_turn == my_index){//if it's my move, and it's not over, act like it
+        received_your_turn(my_index);
     }
 }
 
-void initGeneralGameData()
+void init_general_game_data()
 {
-    remainingTimeHundrethSeconds = 1000.0;//10 seconds
-    toDeduct = 0;
-    startGeneralTimer();
+    remaining_time_hundreth_sec = 1000.0;//10 seconds
+    to_deduct = 0;
+    start_general_timer();
 }
 /**
  * When we got a "hi my index is" message
  */
-void receivedHiMyIndexIs(int i)
+void received_hi_my_index_is(int i)
 {
     switch (state)
     {
-    case 0: //First guy is talking and it isn't me, before I've talked at all
-        state = 2;
-        leftFriend = i;
-        leftFriendPhysically = i;
-        myIndex = i+1;
-        rightFriend = 1;
-        rightFriendPhysically = 1;
+    case NOTHING_DONE: //First guy is talking and it isn't me, before I've talked at all
+        state = IM_NOT_FIRST_NOT_IN_CIRCLE;
+        left_friend = i;
+        left_friend_physically = i;
+        my_index = i+1;
+        right_friend = 1;
+        right_friend_physically = 1;
         break;
-    case 1: //I'm first, and the circle expanded by 1
-        state = 1;
-        leftFriend = i;
-        leftFriendPhysically = i;
+    case IM_FIRST_WAITING_FOR_CIRCLE: //I'm first, and the circle expanded by 1
+        state = IM_FIRST_WAITING_FOR_CIRCLE;
+        left_friend = i;
+        left_friend_physically = i;
         break;
-    case 2: //Some other guy is talking and it isn't me, before I've talked at all
-        state = 2;
-        leftFriend = i;
-        leftFriendPhysically = i;
-        myIndex = i+1;
+    case IM_NOT_FIRST_NOT_IN_CIRCLE: //Some other guy is talking and it isn't me, before I've talked at all
+        state = IM_NOT_FIRST_NOT_IN_CIRCLE;
+        left_friend = i;
+        left_friend_physically = i;
+        my_index = i+1;
         break;
-    case 3: //Some other guy is talking after I did, therefore he's my new right neighbor
-        state = 4;
-        rightFriend = i;
-        rightFriendPhysically = i;
+    case IM_NOT_FIRST_WAITING_FOR_CIRCLE: //Some other guy is talking after I did, therefore he's my new right neighbor
+        state = WAITING_FOR_MY_TURN;
+        right_friend = i;
+        right_friend_physically = i;
         break;
     }
 }
 
-void handleMessage(){
-    switch (recvMessageType)
+void handle_message(){
+    switch (recv_message_type)
     {
     case YOUR_TURN_MESSAGE_TYPE:
-        if(state==6){// If I'm dead, it means it's a new round, and it's my turn. I need to refresh...
-            initGeneralGameData();
-            rightFriend = rightFriendPhysically;
-            leftFriend = leftFriendPhysically;
-            turnRedOff();
-            turnGreenOff();
+        if(state==IM_DEAD){// If I'm dead, it means it's a new round, and it's my turn. I need to refresh...
+            init_general_game_data();
+            right_friend = right_friend_physically;
+            left_friend = left_friend_physically;
+            turn_red_off();
+            turn_green_off();
         }
-        receivedYourTurn(recvMessageContent1);
+        received_your_turn(recv_message_content1);
         break;
     case HI_MY_INDEX_IS_MESSAGE_TYPE:
-        doubleLedBlink(1);
-        receivedHiMyIndexIs(recvMessageContent1);
+        double_led_blink(1);
+        received_hi_my_index_is(recv_message_content1);
         break;
     case IM_DEAD_MESSAGE_TYPE:
-        receivedImDead(recvMessageContent1, recvMessageContent2,recvMessageContent3, recvMessageContent4);
+        received_im_dead(recv_message_content1, recv_message_content2,recv_message_content3, recv_message_content4);
         break;
     }
 }
-void receivedMessageLogic(EasyLink_RxPacket rxPacket){
+void received_message_logic(EasyLink_RxPacket rx_packet){
     //resend the message
-    seqNumber=rxPacket.payload[0];
-    sendMessageLogic(rxPacket.payload[1],rxPacket.payload[2],rxPacket.payload[3],rxPacket.payload[4],rxPacket.payload[5]);
+    seq_number=rx_packet.payload[0];
+    send_message_logic(rx_packet.payload[1],rx_packet.payload[2],rx_packet.payload[3],rx_packet.payload[4],rx_packet.payload[5]);
 
-    recvMessageType = rxPacket.payload[1];
-    recvMessageContent1 = rxPacket.payload[2];
-    recvMessageContent2 = rxPacket.payload[3];
-    recvMessageContent3 = rxPacket.payload[4];
-    recvMessageContent4 = rxPacket.payload[5];
+    recv_message_type = rx_packet.payload[1];
+    recv_message_content1 = rx_packet.payload[2];
+    recv_message_content2 = rx_packet.payload[3];
+    recv_message_content3 = rx_packet.payload[4];
+    recv_message_content4 = rx_packet.payload[5];
 
-    handleMessage();
+    handle_message();
 }
 
 
-static void rfEasyLinkRxFnx(UArg arg0, UArg arg1)
+static void rf_easylink_rx_fnx(UArg arg0, UArg arg1)
 {
-    if(cnf==0){cnf=1;EasyLink_init(EasyLink_Phy_5kbpsSlLr);Semaphore_post(semHandle);}
+    if(cnf==0){cnf=1;EasyLink_init(EasyLink_Phy_5kbpsSlLr);Semaphore_post(sem_handle);}
     else{
-        Semaphore_pend(semHandle, BIOS_WAIT_FOREVER);
+        Semaphore_pend(sem_handle, BIOS_WAIT_FOREVER);
     }
-    EasyLink_RxPacket rxPacket = {0};
+    EasyLink_RxPacket rx_packet = {0};
     while (1)
     {
-        rxPacket.absTime = 0;
-        Semaphore_pend(semHandle2, BIOS_WAIT_FOREVER);
+        rx_packet.absTime = 0;
+        Semaphore_pend(sem_handle2, BIOS_WAIT_FOREVER);
         EasyLink_Status result;
-        result = EasyLink_receive(&rxPacket);
+        result = EasyLink_receive(&rx_packet);
 
         if (result == EasyLink_Status_Success)
         {
-            if ((int)rxPacket.payload[0] > seqNumber /*Didn't Process This Message Yet. Otherwise do nothing*/)
+            if ((int)rx_packet.payload[0] > seq_number /*Didn't Process This Message Yet. Otherwise do nothing*/)
             {
-                receivedMessageLogic(rxPacket);
+                received_message_logic(rx_packet);
             }
-            Semaphore_post(semHandle);
+            Semaphore_post(sem_handle);
         }
     }
 }
 
-void rxTask_init(PIN_Handle ledPinHandle) {
-    pinHandle = ledPinHandle;
+void rx_task_init(PIN_Handle led_pin_handle) {
+    pin_handle = led_pin_handle;
 
-    Task_Params_init(&rxTaskParams);
-    rxTaskParams.stackSize = RFEASYLINKEX_TASK_STACK_SIZE;
-    rxTaskParams.priority = RFEASYLINKEX_TASK_PRIORITY;
-    rxTaskParams.stack = &rxTaskStack;
-    rxTaskParams.arg0 = (UInt)1000000;
+    Task_Params_init(&rx_task_params);
+    rx_task_params.stackSize = RFEASYLINKEX_TASK_STACK_SIZE;
+    rx_task_params.priority = RFEASYLINKEX_TASK_PRIORITY;
+    rx_task_params.stack = &rx_taskStack;
+    rx_task_params.arg0 = (UInt)1000000;
 
-    Task_construct(&rxTask, rfEasyLinkRxFnx, &rxTaskParams, NULL);
+    Task_construct(&rx_task, rf_easylink_rx_fnx, &rx_task_params, NULL);
 }
 
 
 /**
  * generate random number between 1,...,n
  */
-int generateRandomStart(int n)
+int generate_random_start(int n)
 {
     return (rand() % n) + 1;
 }
@@ -479,92 +487,92 @@ int generateRandomStart(int n)
 /**
  * Send a message of type "its your turn mister i"
  */
-void sendYourTurn(int i)
+void send_your_turn(int i)
 {
-    seqNumber+=1;
-    sendMessageLogic(YOUR_TURN_MESSAGE_TYPE,i,0/*Null*/,0/*Null*/,0/*Null*/);
+    seq_number+=1;
+    send_message_logic(YOUR_TURN_MESSAGE_TYPE,i,0/*Null*/,0/*Null*/,0/*Null*/);
 }
 /**
  * Send a message of type "hi i'm new and my index is i"
  */
-void sendHiMyIndexIs(int i)
+void send_hi_my_index_is(int i)
 {
-    seqNumber+=1;
-    sendMessageLogic(HI_MY_INDEX_IS_MESSAGE_TYPE,i,0/*Null*/,0/*Null*/,0/*Null*/);
+    seq_number+=1;
+    send_message_logic(HI_MY_INDEX_IS_MESSAGE_TYPE,i,0/*Null*/,0/*Null*/,0/*Null*/);
 }
 
 
 /**
  * What to do when we register a double button press
  */
-void doubleButtonReaction()
+void double_button_reaction()
 {
     int startingIndex;
     switch (state)
     {
-    case 0: //I'm the first to talk
-        rightFriend = 2;
-        rightFriendPhysically = 2;
-        sendHiMyIndexIs(myIndex);
-        state = 1;
-        doubleLedBlink(1);
+    case NOTHING_DONE: //I'm the first to talk
+        right_friend = 2;
+        right_friend_physically = 2;
+        send_hi_my_index_is(my_index);
+        state = IM_FIRST_WAITING_FOR_CIRCLE;
+        double_led_blink(1);
         break;
-    case 2: //I'm not the first to talk
-        sendHiMyIndexIs(myIndex);
-        state = 3;
-        doubleLedBlink(2);
+    case IM_NOT_FIRST_NOT_IN_CIRCLE: //I'm not the first to talk
+        send_hi_my_index_is(my_index);
+        state = IM_NOT_FIRST_WAITING_FOR_CIRCLE;
+        double_led_blink(2);
         break;
-    case 1: //I'm closing the circle
-        doubleLedBlink(3);
-        state = 4;
-        startingIndex = generateRandomStart(leftFriend);
-        if(startingIndex==myIndex){
-            receivedYourTurn(myIndex);
+    case IM_FIRST_WAITING_FOR_CIRCLE: //I'm closing the circle
+        double_led_blink(3);
+        state = WAITING_FOR_MY_TURN;
+        startingIndex = generate_random_start(left_friend);
+        if(startingIndex==my_index){
+            received_your_turn(my_index);
         } else {
-            sendYourTurn(startingIndex);
+            send_your_turn(startingIndex);
         }
         break;
-    case 7: //Starting new game (can only be done by winner)
-        initGeneralGameData();
-        rightFriend = rightFriendPhysically;
-        leftFriend = leftFriendPhysically;
-        doubleLedBlink(10);
-        receivedYourTurn(myIndex);
+    case IVE_WON: //Starting new game (can only be done by winner)
+        init_general_game_data();
+        right_friend = right_friend_physically;
+        left_friend = left_friend_physically;
+        double_led_blink(10);
+        received_your_turn(my_index);
         break;
     }
 }
-void singleButtonReaction(int buttonPressed)
+void single_button_reaction(int button_pressed)
 {
     switch (state)
     {
-    case 4:// I pressed when it wasn't my turn
-        state = 6;
-        IveDiedAnimation();
+    case WAITING_FOR_MY_TURN:// I pressed when it wasn't my turn
+        state = IM_DEAD;
+        ive_died_animation();
         //notify I'm dead
-        sendImDead(myIndex, leftFriend, rightFriend,100/*No one is gets the next turn*/);
+        send_im_dead(my_index, left_friend, right_friend,100/*No one is gets the next turn*/);
         break;
-    case 5: //I pressed button before my time finished
+    case MY_TURN: //I pressed button before my time finished
         //turn of my lights
-        turnRedOff();
-        turnGreenOff();
-        state = 4;
-        stopTimeDeduction();
-        if(buttonPressed == RIGHT_BUTTON){
-            sendYourTurn(rightFriend);
+        turn_red_off();
+        turn_green_off();
+        state = WAITING_FOR_MY_TURN;
+        stop_time_deduction();
+        if(button_pressed == RIGHT_BUTTON){
+            send_your_turn(right_friend);
         } else{
-            sendYourTurn(leftFriend);
+            send_your_turn(left_friend);
         }
         break;
     }
 
 }
-void buttonCallbackFxn(PIN_Handle handle, PIN_Id pinId) {
+void button_callback_fxn(PIN_Handle handle, PIN_Id pinId) {
     /* Debounce logic, only toggle if the button is still pushed (low) */
     CPUdelay(8000*100);
     if (!PIN_getInputValue(Board_PIN_BUTTON0) && !PIN_getInputValue(Board_PIN_BUTTON1)){
-        firstClickOfDouble=1-firstClickOfDouble;
-        if(!firstClickOfDouble){//########## double click action
-            doubleButtonReaction();
+        first_click_of_double=1-first_click_of_double;
+        if(!first_click_of_double){//########## double click action
+            double_button_reaction();
 
         } else {
             return;// if it's the second alert of the double click, just don't do anything.
@@ -573,11 +581,11 @@ void buttonCallbackFxn(PIN_Handle handle, PIN_Id pinId) {
     else if (!PIN_getInputValue(pinId)) {
         switch (pinId) {
             case Board_PIN_BUTTON1: //################## right click action
-                singleButtonReaction(RIGHT_BUTTON);
+                single_button_reaction(RIGHT_BUTTON);
                 break;
 
             case Board_PIN_BUTTON0: //################## left click action
-                singleButtonReaction(LEFT_BUTTON);
+                single_button_reaction(LEFT_BUTTON);
                 break;
         }
     }
@@ -589,41 +597,41 @@ int main(void)
 {
 
     /* create RX/TX semaphore */
-     Semaphore_Params semParams;
-     semParams.mode = ti_sysbios_knl_Semaphore_Mode_BINARY;
-     Semaphore_Params semParams2;
-     semParams2.mode = ti_sysbios_knl_Semaphore_Mode_BINARY;
+     Semaphore_Params sem_params;
+     sem_params.mode = ti_sysbios_knl_Semaphore_Mode_BINARY;
+     Semaphore_Params sem_params2;
+     sem_params2.mode = ti_sysbios_knl_Semaphore_Mode_BINARY;
 
     /* Call board init functions. */
     Board_initGeneral();
 
     /* Setup callback for LED pins */
-    ledPinHandle = PIN_open(&ledPinState, pinTable);
-    if(!ledPinHandle) {
+    led_pin_handle = PIN_open(&led_pin_state, pin_table);
+    if(!led_pin_handle) {
         System_abort("Error initializing board LED pins\n");
     }
     /* Setup callback for button pins */
-    buttonPinHandle = PIN_open(&buttonPinState, buttonPinTable);
-    if(!buttonPinHandle) {while(1);}
-    if (PIN_registerIntCb(buttonPinHandle, &buttonCallbackFxn) != 0) {while(1);}
+    button_pin_handle = PIN_open(&button_pin_state, button_pin_table);
+    if(!button_pin_handle) {while(1);}
+    if (PIN_registerIntCb(button_pin_handle, &button_callback_fxn) != 0) {while(1);}
 
     /* Clear LED pins */
-    PIN_setOutputValue(ledPinHandle, Board_LED1, 0);
-    PIN_setOutputValue(ledPinHandle, Board_LED2, 0);
+    PIN_setOutputValue(led_pin_handle, Board_LED1, 0);
+    PIN_setOutputValue(led_pin_handle, Board_LED2, 0);
 
     /* Init semaphore 1 */
-    Semaphore_Params_init(&semParams);
-    Semaphore_construct(&semStruct, 1, &semParams);
-    semHandle = Semaphore_handle(&semStruct);
+    Semaphore_Params_init(&sem_params);
+    Semaphore_construct(&sem_struct, 1, &sem_params);
+    sem_handle = Semaphore_handle(&sem_struct);
     /* Init semaphore 2 */
-    Semaphore_Params_init(&semParams2);
-    Semaphore_construct(&semStruct2, 1, &semParams2);
-    semHandle2 = Semaphore_handle(&semStruct2);
+    Semaphore_Params_init(&sem_params2);
+    Semaphore_construct(&sem_struct2, 1, &sem_params2);
+    sem_handle2 = Semaphore_handle(&sem_struct2);
 
-    rxTask_init(ledPinHandle);
-    txTask_init(ledPinHandle);
+    rx_task_init(led_pin_handle);
+    tx_task_init(led_pin_handle);
 
-    initGeneralGameData();
+    init_general_game_data();
     /* Start BIOS */
     BIOS_start();
 
